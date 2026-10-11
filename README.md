@@ -54,20 +54,34 @@ cargo build --release           # macOS: Metal + CPU
   --start-nonce 0 --count 1000000 --backend metal
 ```
 
-Non-Apple GPUs (opt-in features; the default build pulls no GPU toolkit):
+Non-Apple GPUs (opt-in features; neither needs its toolkit to build):
 
 ```bash
-# NVIDIA — builds without the CUDA toolkit (libcuda loaded at runtime).
-cargo build --release --features cuda
-lattice-miner-gpu ... --backend cuda
-
-# AMD / NVIDIA / Intel — needs an OpenCL loader at build (Linux: ocl-icd-opencl-dev).
+# AMD / NVIDIA / Intel, on Linux and Windows. The OpenCL library is loaded at
+# runtime: libOpenCL.so.1 on Linux (ocl-icd-libopencl1, plus the graphics
+# driver's OpenCL package), OpenCL.dll on Windows (installed with the driver).
 cargo build --release --features opencl
 lattice-miner-gpu ... --backend opencl
+
+# NVIDIA — libcuda is loaded at runtime, and NVRTC (from the CUDA toolkit)
+# compiles the kernel, so the machine that runs it needs the toolkit.
+cargo build --release --features cuda
+lattice-miner-gpu ... --backend cuda
 ```
+
+Without `--backend` the worker uses the build's GPU backend for the platform:
+Metal on macOS, otherwise OpenCL, otherwise CUDA. A coordinator passes no
+backend, so to force one set `LATTICE_MINER_BACKEND` in its environment. A
+backend that cannot search (no library, no device, a kernel that does not
+build) exits non-zero with the reason on stderr: the range is not reported as
+exhausted.
 
 ```bash
 cargo test   # reference PoW vectors + midstate/target oracle (all platforms)
+# The OpenCL kernel against the CPU oracle, on this machine's OpenCL device.
+# LATTICE_MINER_OPENCL_DEVICES=all also admits a CPU device (PoCL), for a
+# machine with no graphics chip; it is for testing, not mining.
+cargo test --features opencl -- --ignored
 ```
 
 ## Use with a node

@@ -195,7 +195,7 @@ pub fn search_metal(
 
         let gid = unsafe { *(found_buf.contents() as *const u32) };
         if gid != u32::MAX {
-            let nonce = base + gid as u64;
+            let nonce = base.wrapping_add(gid as u64);
             let hash = sha256::finalize_from_midstate(&ms, nonce);
             assert!(
                 crate::meets_target(&hash, target),
@@ -203,7 +203,7 @@ pub fn search_metal(
             );
             return Some((nonce, hash));
         }
-        base += n;
+        base = base.wrapping_add(n);
         remaining -= n;
     }
     None

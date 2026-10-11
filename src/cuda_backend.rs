@@ -124,14 +124,8 @@ pub fn search_cuda(
     target: &[u8; 32],
     start: u64,
     count: u64,
-) -> Option<(u64, [u8; 32])> {
-    match run(prefix, target, start, count) {
-        Ok(found) => found,
-        Err(e) => {
-            eprintln!("error: cuda backend failed: {e}");
-            None
-        }
-    }
+) -> Result<Option<(u64, [u8; 32])>, String> {
+    run(prefix, target, start, count)
 }
 
 fn run(
@@ -192,7 +186,7 @@ fn run(
         }
         let gid = dev.dtoh_sync_copy(&found_dev).map_err(|e| format!("dtoh found: {e}"))?[0];
         if gid != u32::MAX {
-            let nonce = base + gid as u64;
+            let nonce = base.wrapping_add(gid as u64);
             let hash = sha256::finalize_from_midstate(&ms, nonce);
             assert!(
                 crate::meets_target(&hash, target),
@@ -200,7 +194,7 @@ fn run(
             );
             return Ok(Some((nonce, hash)));
         }
-        base += n;
+        base = base.wrapping_add(n);
         remaining -= n;
     }
     Ok(None)
