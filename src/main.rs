@@ -170,7 +170,8 @@ fn main() {
     });
 
     let backend = match args.backend.as_str() {
-        "auto" => automatic_backend().unwrap_or_else(|| {
+        // An empty value is a variable set to nothing, not a backend's name.
+        "auto" | "" => automatic_backend().unwrap_or_else(|| {
             eprintln!("error: this build has no GPU backend for this platform (rebuild with --features opencl or cuda, or use --backend cpu)");
             std::process::exit(2);
         }),

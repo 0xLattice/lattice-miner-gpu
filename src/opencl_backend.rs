@@ -158,7 +158,7 @@ fn run(
     let device_id = *get_all_devices(device_type())
         .map_err(|e| format!("get_all_devices: {e}"))?
         .first()
-        .ok_or("no OpenCL GPU device found")?;
+        .ok_or(if device_type() == CL_DEVICE_TYPE_GPU { "no OpenCL GPU device found" } else { "no OpenCL device found" })?;
     let device = Device::new(device_id);
     let context = Context::from_device(&device).map_err(|e| format!("context: {e}"))?;
     // OpenCL 1.2 `clCreateCommandQueue` (works on every ICD incl. macOS 1.2 and
@@ -223,7 +223,7 @@ fn run(
                 .map_err(|e| format!("read found: {e}"))?;
         }
         if gid[0] != u32::MAX {
-            let nonce = base + gid[0] as u64;
+            let nonce = base.wrapping_add(gid[0] as u64);
             let hash = sha256::finalize_from_midstate(&ms, nonce);
             assert!(
                 crate::meets_target(&hash, target),
@@ -231,7 +231,7 @@ fn run(
             );
             return Ok(Some((nonce, hash)));
         }
-        base += n;
+        base = base.wrapping_add(n);
         remaining -= n;
     }
     Ok(None)
@@ -262,6 +262,11 @@ mod tests {
                 assert_eq!(found, expected, "prefix of {length} bytes, {count} nonces from {start}");
             }
         }
+        // A range of several kernel launches that runs past the last nonce and
+        // wraps to the first: nothing is skipped or searched twice on the way.
+        target[..3].fill(0);
+        let (start, count) = (u64::MAX - 20_000_000, 40_000_000);
+        assert_eq!(search_opencl(b"lattice", &target, start, count), Ok(crate::search_cpu(b"lattice", &target, start, count)));
         // A range with no winner is exhausted. (One test, not two: OpenCL
         // implementations are not all safe to initialise from two threads at
         // once, and the worker never does.)
