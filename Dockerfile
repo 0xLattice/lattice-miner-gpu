@@ -45,8 +45,10 @@ COPY --from=node /usr/local/bin/lattice-node            /usr/local/bin/lattice-n
 COPY --from=node /usr/local/bin/lattice                 /usr/local/bin/lattice
 COPY --from=node /usr/local/bin/lattice-mining-coordinator /usr/local/bin/lattice-mining-coordinator
 # The reference mining supervisor (one coordinator round at a time; each block
-# names its reward recipient from RECIPIENTS), pinned to the same node release.
-ADD https://raw.githubusercontent.com/adalinxx/lattice-node/60eeb1044/deploy/mine-supervisor.py /usr/local/bin/mine-supervisor.py
+# names its reward recipient from RECIPIENTS). Pinned one change past the node
+# release above: the commit that gives a round a deadline, so that a
+# coordinator waiting on a call that never returns is killed and mining goes on.
+ADD https://raw.githubusercontent.com/adalinxx/lattice-node/a504d1d2e150abfe61878572d95be28cb298a6ed/deploy/mine-supervisor.py /usr/local/bin/mine-supervisor.py
 RUN chmod +x /usr/local/bin/mine-supervisor.py
 COPY --from=worker /src/target/release/lattice-miner-gpu /usr/local/bin/lattice-miner-gpu
 # Backend shim: the coordinator can't pass --backend to the worker, so force it here.
