@@ -262,11 +262,9 @@ mod tests {
                 assert_eq!(found, expected, "prefix of {length} bytes, {count} nonces from {start}");
             }
         }
-    }
-
-    #[test]
-    #[ignore = "needs an OpenCL device"]
-    fn a_range_with_no_winner_is_exhausted() {
+        // A range with no winner is exhausted. (One test, not two: OpenCL
+        // implementations are not all safe to initialise from two threads at
+        // once, and the worker never does.)
         assert_eq!(search_opencl(b"lattice", &[0u8; 32], 0, 100_000), Ok(None));
     }
 }
