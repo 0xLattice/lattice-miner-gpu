@@ -124,14 +124,8 @@ pub fn search_cuda(
     target: &[u8; 32],
     start: u64,
     count: u64,
-) -> Option<(u64, [u8; 32])> {
-    match run(prefix, target, start, count) {
-        Ok(found) => found,
-        Err(e) => {
-            eprintln!("error: cuda backend failed: {e}");
-            None
-        }
-    }
+) -> Result<Option<(u64, [u8; 32])>, String> {
+    run(prefix, target, start, count)
 }
 
 fn run(

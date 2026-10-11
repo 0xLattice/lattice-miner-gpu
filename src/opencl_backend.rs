@@ -6,13 +6,13 @@
 //! This mirrors `metal_backend::search` and `sha256::finalize_from_midstate`
 //! bit-for-bit; the host re-verifies every hit, so a kernel bug fails loudly.
 //!
-//! Feature-gated (`--features opencl`): keeps the default macOS/Metal build free
-//! of the OpenCL link dependency.
+//! Feature-gated (`--features opencl`). The OpenCL library is loaded at runtime, so
+//! the build needs none and a machine without one gets an error, not a crash.
 
 use crate::sha256::{self, Midstate};
 use opencl3::command_queue::CommandQueue;
 use opencl3::context::Context;
-use opencl3::device::{get_all_devices, Device, CL_DEVICE_TYPE_GPU};
+use opencl3::device::{cl_device_type, get_all_devices, Device, CL_DEVICE_TYPE_ALL, CL_DEVICE_TYPE_GPU};
 use opencl3::kernel::{ExecuteKernel, Kernel};
 use opencl3::memory::{Buffer, CL_MEM_READ_ONLY, CL_MEM_READ_WRITE};
 use opencl3::program::Program;
@@ -117,20 +117,25 @@ fn region_words_for(ms: &Midstate) -> (Vec<u32>, u32, u32) {
 }
 
 /// OpenCL search over `[start, start+count)`. Returns the first winning
-/// `(nonce, digest)` or `None`. Errors (no device / build failure) surface as a
-/// printed message and `None`, so the coordinator simply re-assigns the range.
+/// `(nonce, digest)` or `None`, or why it could not search (no OpenCL library,
+/// no device, a kernel that does not build).
 pub fn search_opencl(
     prefix: &[u8],
     target: &[u8; 32],
     start: u64,
     count: u64,
-) -> Option<(u64, [u8; 32])> {
-    match run(prefix, target, start, count) {
-        Ok(found) => found,
-        Err(e) => {
-            eprintln!("error: opencl backend failed: {e}");
-            None
-        }
+) -> Result<Option<(u64, [u8; 32])>, String> {
+    run(prefix, target, start, count)
+}
+
+/// The devices to search on: graphics chips, unless
+/// `LATTICE_MINER_OPENCL_DEVICES=all` admits every device an OpenCL platform
+/// offers. That is for checking the kernel against a CPU implementation (PoCL)
+/// on a machine with no graphics chip, not for mining.
+fn device_type() -> cl_device_type {
+    match std::env::var("LATTICE_MINER_OPENCL_DEVICES").as_deref() {
+        Ok("all") => CL_DEVICE_TYPE_ALL,
+        _ => CL_DEVICE_TYPE_GPU,
     }
 }
 
@@ -150,7 +155,7 @@ fn run(
         ]);
     }
 
-    let device_id = *get_all_devices(CL_DEVICE_TYPE_GPU)
+    let device_id = *get_all_devices(device_type())
         .map_err(|e| format!("get_all_devices: {e}"))?
         .first()
         .ok_or("no OpenCL GPU device found")?;
@@ -230,4 +235,38 @@ fn run(
         remaining -= n;
     }
     Ok(None)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The kernel against the CPU oracle, on whatever OpenCL device this
+    /// machine offers. Ignored by default (most build machines offer none):
+    /// `cargo test --features opencl -- --ignored`, with
+    /// `LATTICE_MINER_OPENCL_DEVICES=all` where the only device is a CPU one.
+    #[test]
+    #[ignore = "needs an OpenCL device"]
+    fn finds_what_the_cpu_search_finds() {
+        // About one nonce in 65,536 wins, so most ranges hold a winner and
+        // the first is rarely at the start.
+        let mut target = [0xff_u8; 32];
+        target[..2].fill(0);
+        // Prefix lengths on both sides of every block boundary the nonce and
+        // the padding can straddle.
+        for length in [0, 1, 47, 48, 55, 56, 63, 64, 100, 111, 112, 119, 120, 200] {
+            let prefix: Vec<u8> = (0..length).map(|i| (i * 7 + 3) as u8).collect();
+            for (start, count) in [(0, 300_000), (u32::MAX as u64 - 5, 300_000), (1 << 40, 17)] {
+                let expected = crate::search_cpu(&prefix, &target, start, count);
+                let found = search_opencl(&prefix, &target, start, count).expect("an OpenCL device");
+                assert_eq!(found, expected, "prefix of {length} bytes, {count} nonces from {start}");
+            }
+        }
+    }
+
+    #[test]
+    #[ignore = "needs an OpenCL device"]
+    fn a_range_with_no_winner_is_exhausted() {
+        assert_eq!(search_opencl(b"lattice", &[0u8; 32], 0, 100_000), Ok(None));
+    }
 }

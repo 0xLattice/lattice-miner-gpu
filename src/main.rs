@@ -54,11 +54,37 @@ struct Args {
     #[arg(long)]
     count: u64,
 
-    /// Search backend: `metal` (Apple GPU, default), `cuda` (NVIDIA),
-    /// `opencl` (AMD/NVIDIA/Intel), or `cpu` (the reference search). cuda/opencl
-    /// require the matching build feature.
-    #[arg(long, default_value = "metal")]
+    /// Search backend: `auto` (default: this build's GPU backend for the
+    /// platform, Metal on macOS, otherwise OpenCL, otherwise CUDA), `metal`
+    /// (Apple GPU), `cuda` (NVIDIA), `opencl` (AMD/NVIDIA/Intel), or `cpu` (the
+    /// reference search). cuda/opencl require the matching build feature. The
+    /// coordinator passes no backend, so one that must be forced is set in the
+    /// environment.
+    #[arg(long, env = "LATTICE_MINER_BACKEND", default_value = "auto")]
     backend: String,
+}
+
+/// The backend `auto` stands for in this build, if it has a GPU backend.
+fn automatic_backend() -> Option<&'static str> {
+    if cfg!(target_os = "macos") {
+        Some("metal")
+    } else if cfg!(feature = "opencl") {
+        Some("opencl")
+    } else if cfg!(feature = "cuda") {
+        Some("cuda")
+    } else {
+        None
+    }
+}
+
+/// A backend that could not search is a failed assignment, never an exhausted
+/// range: the coordinator must not take the nonces as searched.
+#[cfg(any(feature = "cuda", feature = "opencl"))]
+fn searched(backend: &str, outcome: Result<Option<(u64, [u8; 32])>, String>) -> Option<(u64, [u8; 32])> {
+    outcome.unwrap_or_else(|e| {
+        eprintln!("error: {backend} backend failed: {e}");
+        std::process::exit(1);
+    })
 }
 
 /// Mirror of the worker `WorkerResult` JSON contract.
@@ -143,7 +169,15 @@ fn main() {
         std::process::exit(2);
     });
 
-    let found = match args.backend.as_str() {
+    let backend = match args.backend.as_str() {
+        "auto" => automatic_backend().unwrap_or_else(|| {
+            eprintln!("error: this build has no GPU backend for this platform (rebuild with --features opencl or cuda, or use --backend cpu)");
+            std::process::exit(2);
+        }),
+        named => named,
+    };
+
+    let found = match backend {
         "cpu" => search_cpu(&prefix, &target, args.start_nonce, args.count),
         "metal" => {
             #[cfg(target_os = "macos")]
@@ -159,7 +193,7 @@ fn main() {
         "cuda" => {
             #[cfg(feature = "cuda")]
             {
-                cuda_backend::search_cuda(&prefix, &target, args.start_nonce, args.count)
+                searched("cuda", cuda_backend::search_cuda(&prefix, &target, args.start_nonce, args.count))
             }
             #[cfg(not(feature = "cuda"))]
             {
@@ -170,7 +204,7 @@ fn main() {
         "opencl" => {
             #[cfg(feature = "opencl")]
             {
-                opencl_backend::search_opencl(&prefix, &target, args.start_nonce, args.count)
+                searched("opencl", opencl_backend::search_opencl(&prefix, &target, args.start_nonce, args.count))
             }
             #[cfg(not(feature = "opencl"))]
             {
@@ -179,7 +213,7 @@ fn main() {
             }
         }
         other => {
-            eprintln!("error: unknown backend '{other}' (use metal|cuda|opencl|cpu)");
+            eprintln!("error: unknown backend '{other}' (use auto|metal|cuda|opencl|cpu)");
             std::process::exit(2);
         }
     };

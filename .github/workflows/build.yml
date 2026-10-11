@@ -16,18 +16,46 @@ jobs:
       - run: cargo build --release
       - run: cargo test --release
 
-  # Compile-verify the non-Apple GPU backends on Linux (the deployment target for
-  # cloud rental). cudarc uses runtime loading (libcuda dlopen'd at run time), so
-  # the host builds without the CUDA toolkit; OpenCL links libOpenCL via ocl-icd.
-  # Runtime correctness is enforced at run time by the host re-verification of
-  # every hit against the CPU oracle (see each backend's `assert!`).
+  # The non-Apple GPU backends on Linux. Neither needs its toolkit to build:
+  # cudarc and the OpenCL bindings load their libraries at run time. The OpenCL
+  # kernel is then run against the CPU oracle on PoCL, a CPU implementation of
+  # OpenCL (a runner has no graphics chip). CUDA is compile-verified only; at
+  # run time every backend's host re-verifies each hit against the oracle.
   linux-gpu-features:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
-      - name: Install OpenCL loader (for --features opencl link)
-        run: sudo apt-get update && sudo apt-get install -y ocl-icd-opencl-dev
-      - run: cargo build --release --features opencl
       - run: cargo build --release --features cuda
-      - run: cargo test --release   # CPU oracle tests are platform-independent
+      - run: cargo build --release --features opencl
+      - run: cargo test --release --features opencl   # CPU oracle tests are platform-independent
+      - name: A machine with no OpenCL fails the assignment instead of calling the range searched
+        run: |
+          if ./target/release/lattice-miner-gpu --work-id none --prefix-hex 00 --target ff --count 16 > out.json 2> err.txt; then
+            echo "searched without an OpenCL device: $(cat out.json)"; exit 1
+          fi
+          cat err.txt; grep -q "opencl backend failed" err.txt; test ! -s out.json
+      - name: Install PoCL
+        run: sudo apt-get update && sudo apt-get install -y ocl-icd-libopencl1 pocl-opencl-icd
+      - name: The OpenCL kernel finds what the CPU search finds
+        run: LATTICE_MINER_OPENCL_DEVICES=all cargo test --release --features opencl -- --ignored
+
+  # The Windows worker: OpenCL, loaded from the graphics driver's OpenCL.dll
+  # when there is one. A runner has none, so this checks the build, the oracle
+  # and that the worker says so instead of failing to start.
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - run: cargo build --release --features opencl
+      - run: cargo test --release --features opencl
+      - name: The CPU search runs, and a machine with no OpenCL fails the assignment
+        shell: bash
+        run: |
+          worker=./target/release/lattice-miner-gpu.exe
+          "$worker" --work-id cpu --prefix-hex deadbeef --target "$(printf 'ff%.0s' {1..32})" --count 4 --backend cpu | grep -q '"status":"found"'
+          if "$worker" --work-id none --prefix-hex 00 --target ff --count 16 > out.json 2> err.txt; then
+            echo "searched without an OpenCL device: $(cat out.json)"; exit 1
+          fi
+          cat err.txt; grep -q "opencl backend failed" err.txt; test ! -s out.json
