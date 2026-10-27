@@ -1,6 +1,6 @@
 # lattice-miner-gpu
 
-A GPU proof-of-work mining worker for the [Lattice](https://github.com/adalinxx/lattice-node)
+A GPU proof-of-work mining worker for the [Lattice](https://github.com/0xLattice/lattice-node)
 network. It implements the **Mining Worker Protocol** — a coordinator
 (`lattice-mining-coordinator`) hands it a nonce range and the nonce-independent
 PoW prefix; it searches for a nonce where
