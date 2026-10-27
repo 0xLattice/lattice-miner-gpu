@@ -40,7 +40,7 @@ jobs:
           FLEET_HEARTBEAT_URL: ${{ secrets.FLEET_HEARTBEAT_URL }}
           FLEET_LABEL: ${{ vars.FLEET_LABEL || 'nexus-miner' }}
           FLEET_DESIRED: ${{ github.event.inputs.desired || vars.FLEET_DESIRED || '1' }}
-          FLEET_IMAGE: ${{ vars.FLEET_IMAGE || 'ghcr.io/adalinxx/lattice-miner-gpu:main' }}
+          FLEET_IMAGE: ${{ vars.FLEET_IMAGE || 'ghcr.io/0xlattice/lattice-miner-gpu:main' }}
           FLEET_MAX_DPH: ${{ vars.FLEET_MAX_DPH || '0.10' }}
           FLEET_QUERY: ${{ vars.FLEET_QUERY }}
           FLEET_DISK: ${{ vars.FLEET_DISK || '32' }}

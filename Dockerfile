@@ -4,7 +4,7 @@
 # Composes the CUDA PoW worker built here with the Lattice node + mining coordinator
 # from the published node image. See deploy/gpu-entrypoint.sh for the run model.
 #
-# Run:  docker run --gpus all ghcr.io/adalinxx/lattice-miner-gpu:main
+# Run:  docker run --gpus all ghcr.io/0xlattice/lattice-miner-gpu:main
 # libcuda is provided by the host driver via the NVIDIA container runtime.
 
 # ── Stage 1: build the CUDA PoW worker (Rust) ─────────────────────────────────

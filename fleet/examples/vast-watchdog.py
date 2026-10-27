@@ -26,7 +26,7 @@ no checkpoint/restore needed.
 Config (env; all optional except the API key, set on the vastai CLI beforehand):
   FLEET_LABEL          instance label to manage           (default nexus-miner)
   FLEET_DESIRED        how many healthy instances to hold  (default 1)
-  FLEET_IMAGE          miner image                         (default ghcr.io/adalinxx/lattice-miner-gpu:main)
+  FLEET_IMAGE          miner image                         (default ghcr.io/0xlattice/lattice-miner-gpu:main)
   FLEET_ONSTART        onstart command                     (default /usr/local/bin/gpu-entrypoint)
   FLEET_DISK           disk GB                             (default 32)
   FLEET_QUERY          vastai offer search query           (default: cheapest reliable single
@@ -44,7 +44,7 @@ import urllib.request
 VAST = os.environ.get("VASTAI_BIN", "vastai")
 LABEL = os.environ.get("FLEET_LABEL", "nexus-miner")
 DESIRED = int(os.environ.get("FLEET_DESIRED", "1"))
-IMAGE = os.environ.get("FLEET_IMAGE", "ghcr.io/adalinxx/lattice-miner-gpu:main")
+IMAGE = os.environ.get("FLEET_IMAGE", "ghcr.io/0xlattice/lattice-miner-gpu:main")
 ONSTART = os.environ.get("FLEET_ONSTART", "/usr/local/bin/gpu-entrypoint")
 DISK = os.environ.get("FLEET_DISK", "32")
 # GPU-model-AGNOSTIC by design: the miner runs on any CUDA GPU, so rent the cheapest
