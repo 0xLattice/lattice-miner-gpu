@@ -1,6 +1,6 @@
 # lattice-miner-gpu
 
-A GPU proof-of-work mining worker for the [Lattice](https://github.com/adalinxx/lattice-node)
+A GPU proof-of-work mining worker for the [Lattice](https://github.com/0xLattice/lattice-node)
 network. It implements the **Mining Worker Protocol** — a coordinator
 (`lattice-mining-coordinator`) hands it a nonce range and the nonce-independent
 PoW prefix; it searches for a nonce where
@@ -97,7 +97,7 @@ lattice-mining-coordinator \
 
 ## Docker (cloud GPU rental)
 
-A self-contained CUDA image (`ghcr.io/adalinxx/lattice-miner-gpu:main`, built by CI)
+A self-contained CUDA image (`ghcr.io/0xlattice/lattice-miner-gpu:main`, built by CI)
 bundles a Lattice node + the mining coordinator + this worker. One node process hosts
 Nexus and the configured child levels; once Nexus catches up to the network, the
 reference mine-supervisor drives the GPU:
@@ -105,7 +105,7 @@ reference mine-supervisor drives the GPU:
 ```bash
 docker run --gpus all -v lattice-data:/data \
   -e RECIPIENTS=Nexus=<addr>,Nexus/testnet=<addr> \
-  ghcr.io/adalinxx/lattice-miner-gpu:main
+  ghcr.io/0xlattice/lattice-miner-gpu:main
 ```
 
 `libcuda` is provided by the host driver through the NVIDIA container runtime

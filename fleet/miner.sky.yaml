@@ -39,7 +39,7 @@ resources:
   accelerators: {RTX3060:1, RTX3070:1, RTX3080:1, RTX3090:1, RTX4090:1, L4:1, T4:1, A10:1, A10G:1}
   use_spot: true
   disk_size: 40
-  image_id: docker:ghcr.io/adalinxx/lattice-miner-gpu:main
+  image_id: docker:ghcr.io/0xlattice/lattice-miner-gpu:main
   # Spot preemptions recover UNBOUNDED (re-provision + restart). max_restarts_on_errors
   # caps recovery from NON-ZERO-EXIT crashes only: after 3 crash-restarts the managed job
   # goes FAILED and stops mining — it will NOT self-heal, and nothing here alerts on that

@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2021"
 description = "GPU proof-of-work miner for the Lattice network (Mining Worker Protocol)"
 license = "MIT OR Apache-2.0"
-repository = "https://github.com/adalinxx/lattice-miner-gpu"
+repository = "https://github.com/0xLattice/lattice-miner-gpu"
 
 [[bin]]
 name = "lattice-miner-gpu"

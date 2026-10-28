@@ -10,7 +10,7 @@ any CUDA GPU on any provider** — nothing here is tied to a specific cloud or G
 On any box with an NVIDIA GPU + the NVIDIA container runtime:
 
 ```bash
-docker run --gpus all -v lattice-data:/data ghcr.io/adalinxx/lattice-miner-gpu:main
+docker run --gpus all -v lattice-data:/data ghcr.io/0xlattice/lattice-miner-gpu:main
 ```
 
 That's the whole miner. `libcuda` comes from the host driver; the node syncs and the

@@ -4,7 +4,7 @@
 # Composes the CUDA PoW worker built here with the Lattice node + mining coordinator
 # from the published node image. See deploy/gpu-entrypoint.sh for the run model.
 #
-# Run:  docker run --gpus all ghcr.io/adalinxx/lattice-miner-gpu:main
+# Run:  docker run --gpus all ghcr.io/0xlattice/lattice-miner-gpu:main
 # libcuda is provided by the host driver via the NVIDIA container runtime.
 
 # ── Stage 1: build the CUDA PoW worker (Rust) ─────────────────────────────────
@@ -49,7 +49,7 @@ COPY --from=node /usr/local/bin/lattice-mining-coordinator /usr/local/bin/lattic
 # supervisor with one later change: the commit that gives a round a deadline,
 # so that a coordinator waiting on a call that never returns is killed and
 # mining goes on.
-ADD https://raw.githubusercontent.com/adalinxx/lattice-node/a504d1d2e150abfe61878572d95be28cb298a6ed/deploy/mine-supervisor.py /usr/local/bin/mine-supervisor.py
+ADD https://raw.githubusercontent.com/0xLattice/lattice-node/f4491d87450ca7eb027c03eb03c89dd18a7f5aae/deploy/mine-supervisor.py /usr/local/bin/mine-supervisor.py
 RUN chmod +x /usr/local/bin/mine-supervisor.py
 COPY --from=worker /src/target/release/lattice-miner-gpu /usr/local/bin/lattice-miner-gpu
 # Backend shim: the coordinator can't pass --backend to the worker, so force it here.
