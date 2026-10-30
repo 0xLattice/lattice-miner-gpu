@@ -16,7 +16,7 @@ COPY . .
 RUN cargo build --release --features cuda
 
 # ── The Lattice node + coordinator (already built, static-swift-stdlib) ───────
-FROM ghcr.io/adalinxx/lattice-node:sha-f57e683@sha256:3bf3aee337f7522e3c8bc41499d3df1d2987f25c869828432f85fd2ed67f184b AS node
+FROM ghcr.io/0xlattice/lattice-node:3.2.0@sha256:b9951cdce3469add47d1c086a46185edc0f3da4d715309b94ed553e008de1d26 AS node
 
 # ── Stage 2: the self-contained GPU miner ─────────────────────────────────────
 # RUNTIME base (not devel): the only CUDA piece needed at run time is libnvrtc (cudarc
