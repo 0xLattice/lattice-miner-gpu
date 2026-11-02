@@ -34,7 +34,11 @@ Built in phases, each gated on reproducing the previous one bit-for-bit:
 - [x] **Phase 5 — OpenCL** (`--backend opencl`, AMD / NVIDIA / Intel). One
       backend for every non-Apple GPU via the platform OpenCL ICD.
 
-Every backend reproduces the CPU oracle bit-for-bit, and the host
+The throughput figures above are inherited benchmarks, not measurements
+revalidated by this port. See [PORTING.md](PORTING.md) for the dated Metal
+hardware result and the remaining CUDA/OpenCL hardware coverage gaps.
+
+Backend kernels are intended to reproduce the CPU oracle bit-for-bit, and the host
 **re-verifies every hit** against `sha256::finalize_from_midstate` before
 reporting it. Metal initialization, execution and invalid-result failures return
 a nonzero worker exit; they never report an exhausted range. CUDA/OpenCL retain
