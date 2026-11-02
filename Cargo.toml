@@ -1,0 +1,45 @@
+[package]
+name = "lattice-miner-gpu"
+version = "0.1.0"
+edition = "2021"
+description = "GPU proof-of-work miner for the Lattice network (Mining Worker Protocol)"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/0xLattice/lattice-miner-gpu"
+
+[[bin]]
+name = "lattice-miner-gpu"
+path = "src/main.rs"
+
+[features]
+# Off by default so the stock build (macOS/Metal + CPU) needs no GPU toolkits.
+# Enable per non-Apple target: `--features cuda` (NVIDIA) / `--features opencl`
+# (AMD, NVIDIA, Intel). See README for build prerequisites.
+cuda = ["dep:cudarc"]
+opencl = ["dep:opencl3"]
+
+[dependencies]
+clap = { version = "4", features = ["derive", "env"] }
+sha2 = "0.10"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+hex = "0.4"
+
+# CUDA backend (NVIDIA). dynamic-loading resolves libcuda at runtime, so the host
+# binary builds without the CUDA toolkit; nvrtc compiles the kernel at runtime.
+# `cuda-12060` selects bundled bindings (no toolkit needed at build; libcuda is
+# loaded at runtime). Builders targeting an older NVIDIA driver can swap this for
+# a lower `cuda-XXXXX` feature (see cudarc docs).
+cudarc = { version = "0.12", optional = true, features = ["driver", "nvrtc", "cuda-12060"] }
+# OpenCL backend (AMD / NVIDIA / Intel). `dynamic` loads the platform's OpenCL
+# library at runtime (libOpenCL.so.1, OpenCL.dll), so the binary builds without
+# it and starts on a machine that has none.
+opencl3 = { version = "0.12", optional = true, default-features = false, features = ["CL_VERSION_1_2", "dynamic"] }
+
+# Metal backend (Apple Silicon). The `metal` crate is in maintenance but
+# functional; objc2-metal is the eventual migration target (see README).
+[target.'cfg(target_os = "macos")'.dependencies]
+metal = "0.29"
+
+[profile.release]
+lto = true
+codegen-units = 1

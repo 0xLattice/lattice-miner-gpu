@@ -1,0 +1,119 @@
+# lattice-miner-gpu
+
+A GPU proof-of-work mining worker for the [Lattice](https://github.com/0xLattice/lattice-node)
+network. It implements the **Mining Worker Protocol** — a coordinator
+(`lattice-mining-coordinator`) hands it a nonce range and the nonce-independent
+PoW prefix; it searches for a nonce where
+
+```
+SHA256( prefix || nonce_be64 )  ≤  target
+```
+
+and prints one `WorkerResult` JSON object. A worker needs only SHA-256 and the
+protocol — no Lattice/block-parsing code. See
+`lattice-node/docs/mining-workers.md` for the normative contract.
+
+## Status
+
+Built in phases, each gated on reproducing the previous one bit-for-bit:
+
+- [x] **Phase 1 — CPU golden reference** (`--backend cpu`). The oracle every
+      GPU kernel is tested against.
+- [x] **Phase 2 — Metal kernel** (`--backend metal`, Apple Silicon). Resumes
+      SHA-256 from a host-computed prefix midstate over the final block(s).
+      Verified bit-for-bit against the CPU oracle. **~230 MH/s** un-optimized on
+      M-series (vs ~10 MH/s single CPU thread).
+- [x] **Phase 3 — kernel optimization** — full unroll, op-reduced Ch/Maj,
+      host-precomputed message words. **~834 MH/s** (3.6× the first kernel).
+      Remaining headroom (message-schedule precompute, high-word early-exit)
+      toward ~1 GH/s.
+- [x] **Phase 4 — CUDA** (`--backend cuda`, NVIDIA). `cudarc` + NVRTC compiles
+      the kernel at runtime; `libcuda` is loaded dynamically, so the host binary
+      builds without the CUDA toolkit and runs on any NVIDIA driver (incl. cloud
+      rental: vast.ai / RunPod / Lambda). Same midstate-resume kernel as Metal.
+- [x] **Phase 5 — OpenCL** (`--backend opencl`, AMD / NVIDIA / Intel). One
+      backend for every non-Apple GPU via the platform OpenCL ICD.
+
+Every backend reproduces the CPU oracle bit-for-bit, and the host
+**re-verifies every hit** against `sha256::finalize_from_midstate` before
+reporting it. Metal initialization, execution and invalid-result failures return
+a nonzero worker exit; they never report an exhausted range. CUDA/OpenCL retain
+their existing hit assertions.
+
+Backends are a thin Rust host calling per-vendor native kernels (not one portable
+shader): SHA-256's hot path is rotates and 3-input booleans, which native ISAs do
+in one instruction. **Metal runs only on macOS** (Apple GPU isn't visible inside
+Linux containers); **CUDA/OpenCL** are how the network is mined on commodity and
+cloud GPUs — essential for hashpower beyond Apple Silicon.
+
+## Build & run
+
+```bash
+cargo build --release           # macOS: Metal + CPU
+./target/release/lattice-miner-gpu \
+  --work-id w1 --prefix-hex deadbeef \
+  --target ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff \
+  --start-nonce 0 --count 1000000 --backend metal
+```
+
+Non-Apple GPUs (opt-in features; neither needs its toolkit to build):
+
+```bash
+# AMD / NVIDIA / Intel, on Linux and Windows. The OpenCL library is loaded at
+# runtime: libOpenCL.so.1 on Linux (ocl-icd-libopencl1, plus the graphics
+# driver's OpenCL package), OpenCL.dll on Windows (installed with the driver).
+cargo build --release --features opencl
+lattice-miner-gpu ... --backend opencl
+
+# NVIDIA — libcuda is loaded at runtime, and NVRTC (from the CUDA toolkit)
+# compiles the kernel, so the machine that runs it needs the toolkit.
+cargo build --release --features cuda
+lattice-miner-gpu ... --backend cuda
+```
+
+Without `--backend` the worker uses the build's GPU backend for the platform:
+Metal on macOS, otherwise OpenCL, otherwise CUDA. A coordinator passes no
+backend, so to force one set `LATTICE_MINER_BACKEND` in its environment. A
+backend that cannot search (no library, no device, a kernel that does not
+build) exits non-zero with the reason on stderr: the range is not reported as
+exhausted.
+
+```bash
+cargo test   # reference PoW vectors + midstate/target oracle (all platforms)
+# The OpenCL kernel against the CPU oracle, on this machine's OpenCL device.
+# LATTICE_MINER_OPENCL_DEVICES=all also admits a CPU device (PoCL), for a
+# machine with no graphics chip; it is for testing, not mining.
+cargo test --features opencl -- --ignored
+```
+
+## Use with a node
+
+Point the coordinator at this binary:
+
+```bash
+lattice-mining-coordinator \
+  --node http://127.0.0.1:8080 --rpc-cookie-file <root>/chains/Nexus/.cookie \
+  --recipient Nexus=<addr> \
+  --worker-executable ./target/release/lattice-miner-gpu --workers 1
+```
+
+## Docker (cloud GPU rental)
+
+A self-contained CUDA image (`ghcr.io/0xlattice/lattice-miner-gpu:main`, built by CI)
+bundles a Lattice node + the mining coordinator + this worker. One node process hosts
+Nexus and the configured child levels; once Nexus catches up to the network, the
+reference mine-supervisor drives the GPU:
+
+```bash
+docker run --gpus all -v lattice-data:/data \
+  -e RECIPIENTS=Nexus=<addr>,Nexus/testnet=<addr> \
+  ghcr.io/0xlattice/lattice-miner-gpu:main
+```
+
+`libcuda` is provided by the host driver through the NVIDIA container runtime
+(`--gpus all`). Each block names its own reward recipient: `RECIPIENTS` (required)
+maps `<chain path>=<address>`; a hosted chain without an entry burns its reward and
+fees. No key or pre-signed reward file lives on the box. Other tunables via `-e`:
+`HOSTED_CHAINS` (merge-mined child paths, parent first; default `Nexus/testnet`, empty
+= Nexus only), `NEXUS_PEERS`, `WORKERS`, `BATCH_SIZE`, `MINER_BACKEND`
+(cuda|opencl|cpu). See `deploy/gpu-entrypoint.sh`.
