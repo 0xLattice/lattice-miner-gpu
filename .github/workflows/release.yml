@@ -1,0 +1,124 @@
+name: release
+
+# A tag push builds, tests and packages the worker for each platform, then
+# publishes the archives and their checksums as the tag's GitHub release.
+# Pull requests run the same build and packaging without publishing.
+on:
+  push:
+    tags: ['v*', '[0-9]*']
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        include:
+          # One Linux binary carries both non-Apple backends: OpenCL and CUDA
+          # libraries are loaded at run time, so neither toolkit is needed to
+          # build. Built on Ubuntu 20.04 so it runs on glibc 2.31 and newer.
+          - platform: linux-amd64
+            runner: ubuntu-latest
+            container: ubuntu:20.04
+            features: --features cuda,opencl
+            exe: ''
+            rustflags: ''
+          - platform: windows-amd64
+            runner: windows-latest
+            container: ''
+            features: --features cuda,opencl
+            exe: .exe
+            # Static C runtime: a clean Windows has no VCRUNTIME140.dll.
+            rustflags: -C target-feature=+crt-static
+          - platform: macos-arm64
+            runner: macos-latest
+            container: ''
+            features: ''
+            exe: ''
+            rustflags: ''
+    runs-on: ${{ matrix.runner }}
+    container: ${{ matrix.container }}
+    env:
+      RUSTFLAGS: ${{ matrix.rustflags }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Install Linux build tools
+        if: matrix.container != ''
+        run: |
+          apt-get update
+          DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+            build-essential ca-certificates curl git
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
+        with:
+          toolchain: stable
+      # Pull requests check that the version reads; a tag must match it.
+      - name: The tag names the crate version
+        run: |
+          crate_version="$(tr -d '\r' < Cargo.toml | sed -n 's/^version = "\(.*\)"$/\1/p' | head -n1)"
+          echo "Cargo.toml version: $crate_version"
+          [[ -n "$crate_version" ]]
+          if [[ "${{ github.ref_type }}" == tag && "${GITHUB_REF_NAME#v}" != "$crate_version" ]]; then
+            echo "tag $GITHUB_REF_NAME does not match Cargo.toml version $crate_version" >&2
+            exit 1
+          fi
+      - name: Run tests before packaging
+        run: cargo test --release --locked ${{ matrix.features }}
+      - run: cargo build --release --locked ${{ matrix.features }}
+      - name: Package
+        env:
+          RELEASE_VERSION: ${{ github.ref_type == 'tag' && github.ref_name || github.sha }}
+        run: |
+          set -euo pipefail
+          bundle_name="lattice-miner-gpu-${RELEASE_VERSION}-${{ matrix.platform }}"
+          mkdir -p "dist/$bundle_name/bin"
+          cp "target/release/lattice-miner-gpu${{ matrix.exe }}" "dist/$bundle_name/bin/"
+          cp README.md LICENSE "dist/$bundle_name/"
+          cd dist
+          tar -czf "$bundle_name.tar.gz" "$bundle_name"
+          if command -v sha256sum >/dev/null; then hash="$(sha256sum "$bundle_name.tar.gz")"
+          else hash="$(shasum -a 256 "$bundle_name.tar.gz")"; fi
+          printf '%s  %s\n' "${hash%% *}" "$bundle_name.tar.gz" > "$bundle_name.tar.gz.sha256"
+          cat "$bundle_name.tar.gz.sha256"
+          rm -rf "$bundle_name"
+      - name: The packaged worker runs
+        run: |
+          set -euo pipefail
+          mkdir extracted
+          tar -xzf dist/*.tar.gz -C extracted
+          worker="$(echo extracted/*/bin/lattice-miner-gpu${{ matrix.exe }})"
+          "$worker" --work-id cpu --prefix-hex deadbeef \
+            --target "$(printf 'ff%.0s' {1..32})" --count 4 --backend cpu | grep -q '"status":"found"'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: lattice-miner-gpu-${{ matrix.platform }}
+          path: dist/*
+          if-no-files-found: error
+
+  publish:
+    needs: build
+    if: github.ref_type == 'tag'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - name: Publish GitHub release assets
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          cd dist
+          sha256sum -c *.sha256
+          gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --verify-tag \
+            --title "$TAG" \
+            --notes "lattice-miner-gpu $TAG prebuilt workers. See the README's Download section to verify and run them." \
+            *

@@ -50,6 +50,50 @@ in one instruction. **Metal runs only on macOS** (Apple GPU isn't visible inside
 Linux containers); **CUDA/OpenCL** are how the network is mined on commodity and
 cloud GPUs — essential for hashpower beyond Apple Silicon.
 
+## Download
+
+Prebuilt workers are attached to each
+[release](https://github.com/0xLattice/lattice-miner-gpu/releases):
+
+| Archive | Backends | Backend flag |
+| --- | --- | --- |
+| `lattice-miner-gpu-<version>-linux-amd64.tar.gz` | OpenCL, CUDA, CPU | `--backend opencl` (AMD / Intel / NVIDIA) or `--backend cuda` (NVIDIA) |
+| `lattice-miner-gpu-<version>-windows-amd64.tar.gz` | OpenCL, CUDA, CPU | `--backend opencl` (AMD / Intel / NVIDIA) or `--backend cuda` (NVIDIA) |
+| `lattice-miner-gpu-<version>-macos-arm64.tar.gz` | Metal, CPU | `--backend metal` (the default on macOS) |
+
+The Linux binary needs glibc 2.31 or newer (Ubuntu 20.04, Debian 11 and later).
+The mining coordinator (from the
+[lattice-node releases](https://github.com/0xLattice/lattice-node/releases)) is
+built for Linux and macOS only, so to mine on Windows run the Linux archive under
+WSL2; the Windows binary runs as a standalone worker.
+
+Verify the archive against its checksum file, then unpack it:
+
+```bash
+sha256sum -c lattice-miner-gpu-<version>-<platform>.tar.gz.sha256       # Linux, Windows (Git Bash)
+shasum -a 256 -c lattice-miner-gpu-<version>-<platform>.tar.gz.sha256   # macOS
+tar -xzf lattice-miner-gpu-<version>-<platform>.tar.gz
+./lattice-miner-gpu-<version>-<platform>/bin/lattice-miner-gpu --help
+```
+
+On Linux and Windows, `auto` picks OpenCL. On an NVIDIA machine that mines with
+CUDA, run the coordinator with `LATTICE_MINER_BACKEND=cuda`. The worker loads its
+GPU libraries at run time:
+
+- OpenCL: `libOpenCL.so.1` on Linux (`ocl-icd-libopencl1` plus the graphics
+  driver's OpenCL support), `OpenCL.dll` on Windows (installed with the driver).
+- CUDA: the driver library, `libcuda.so` on Linux (if the driver installed only
+  `libcuda.so.1`, add a `libcuda.so` symlink to it) or `nvcuda.dll` on Windows,
+  and NVRTC from CUDA 12 (`libnvrtc.so.12`, for example the `cuda-nvrtc-12-6`
+  package, or `nvrtc64_120_0.dll`), on the library search path. Use an NVRTC no
+  newer than the CUDA version `nvidia-smi` reports for the driver.
+
+Each worker process mines on one GPU: CUDA device 0, the first OpenCL GPU
+found, or the system default Metal device.
+
+On macOS, a downloaded binary may be quarantined by Gatekeeper;
+`xattr -d com.apple.quarantine <path>` clears it.
+
 ## Build & run
 
 ```bash
