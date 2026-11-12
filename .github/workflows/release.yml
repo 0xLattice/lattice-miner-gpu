@@ -1,0 +1,85 @@
+name: release
+
+# A tag push builds, tests and packages the worker for each platform, then
+# publishes the archives and their checksums as the tag's GitHub release.
+# Pull requests run the same build and packaging without publishing.
+on:
+  push:
+    tags: ['v*', '[0-9]*']
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        include:
+          # One Linux binary carries both non-Apple backends: OpenCL and CUDA
+          # libraries are loaded at run time, so neither toolkit is needed to
+          # build. Built on 22.04 so the binary runs on its glibc and newer.
+          - platform: linux-amd64
+            runner: ubuntu-22.04
+            features: --features cuda,opencl
+          - platform: macos-arm64
+            runner: macos-latest
+            features: ''
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Run tests before packaging
+        run: cargo test --release --locked ${{ matrix.features }}
+      - run: cargo build --release --locked ${{ matrix.features }}
+      - name: Package
+        env:
+          RELEASE_VERSION: ${{ github.ref_type == 'tag' && github.ref_name || github.sha }}
+        run: |
+          set -euo pipefail
+          bundle_name="lattice-miner-gpu-${RELEASE_VERSION}-${{ matrix.platform }}"
+          mkdir -p "dist/$bundle_name/bin"
+          cp target/release/lattice-miner-gpu "dist/$bundle_name/bin/"
+          cp README.md LICENSE "dist/$bundle_name/"
+          cd dist
+          tar -czf "$bundle_name.tar.gz" "$bundle_name"
+          shasum -a 256 "$bundle_name.tar.gz" > "$bundle_name.tar.gz.sha256"
+          shasum -a 256 -c "$bundle_name.tar.gz.sha256"
+          rm -rf "$bundle_name"
+      - name: The packaged worker runs
+        run: |
+          set -euo pipefail
+          mkdir extracted
+          tar -xzf dist/*.tar.gz -C extracted
+          worker="$(echo extracted/*/bin/lattice-miner-gpu)"
+          "$worker" --work-id cpu --prefix-hex deadbeef \
+            --target "$(printf 'ff%.0s' {1..32})" --count 4 --backend cpu | grep -q '"status":"found"'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: lattice-miner-gpu-${{ matrix.platform }}
+          path: dist/*
+          if-no-files-found: error
+
+  publish:
+    needs: build
+    if: github.ref_type == 'tag'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - name: Publish GitHub release assets
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          cd dist
+          shasum -a 256 -c *.sha256
+          gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --verify-tag \
+            --title "$TAG" \
+            --notes "lattice-miner-gpu $TAG prebuilt workers. See the README's Download section to verify and run them." \
+            *

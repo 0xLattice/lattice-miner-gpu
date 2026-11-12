@@ -50,6 +50,32 @@ in one instruction. **Metal runs only on macOS** (Apple GPU isn't visible inside
 Linux containers); **CUDA/OpenCL** are how the network is mined on commodity and
 cloud GPUs — essential for hashpower beyond Apple Silicon.
 
+## Download
+
+Prebuilt workers are attached to each
+[release](https://github.com/0xLattice/lattice-miner-gpu/releases):
+
+| Archive | Backends | Backend flag |
+| --- | --- | --- |
+| `lattice-miner-gpu-<version>-linux-amd64.tar.gz` | OpenCL, CUDA, CPU | `--backend opencl` (AMD / Intel / NVIDIA) or `--backend cuda` (NVIDIA) |
+| `lattice-miner-gpu-<version>-macos-arm64.tar.gz` | Metal, CPU | `--backend metal` (the default on macOS) |
+
+Verify the archive against its checksum file, then unpack it:
+
+```bash
+sha256sum -c lattice-miner-gpu-<version>-<platform>.tar.gz.sha256       # Linux
+shasum -a 256 -c lattice-miner-gpu-<version>-<platform>.tar.gz.sha256   # macOS
+tar -xzf lattice-miner-gpu-<version>-<platform>.tar.gz
+./lattice-miner-gpu-<version>-<platform>/bin/lattice-miner-gpu --help
+```
+
+On Linux, `auto` picks OpenCL. On an NVIDIA machine that mines with CUDA, run
+the coordinator with `LATTICE_MINER_BACKEND=cuda`. The Linux binary loads its GPU
+libraries at run time: OpenCL needs `libOpenCL.so.1` and the graphics driver's
+OpenCL support; CUDA needs the NVIDIA driver (`libcuda`) and NVRTC (for example
+the `cuda-nvrtc-12-6` package). On macOS, a downloaded binary may be quarantined
+by Gatekeeper; `xattr -d com.apple.quarantine <path>` clears it.
+
 ## Build & run
 
 ```bash
