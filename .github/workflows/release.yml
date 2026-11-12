@@ -24,18 +24,24 @@ jobs:
             container: ubuntu:20.04
             features: --features cuda,opencl
             exe: ''
+            rustflags: ''
           - platform: windows-amd64
             runner: windows-latest
             container: ''
             features: --features cuda,opencl
             exe: .exe
+            # Static C runtime: a clean Windows has no VCRUNTIME140.dll.
+            rustflags: -C target-feature=+crt-static
           - platform: macos-arm64
             runner: macos-latest
             container: ''
             features: ''
             exe: ''
+            rustflags: ''
     runs-on: ${{ matrix.runner }}
     container: ${{ matrix.container }}
+    env:
+      RUSTFLAGS: ${{ matrix.rustflags }}
     defaults:
       run:
         shell: bash
@@ -50,11 +56,13 @@ jobs:
       - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
         with:
           toolchain: stable
+      # Pull requests check that the version reads; a tag must match it.
       - name: The tag names the crate version
-        if: github.ref_type == 'tag'
         run: |
-          crate_version="$(sed -n 's/^version = "\(.*\)"$/\1/p' Cargo.toml | head -n1)"
-          if [[ "${GITHUB_REF_NAME#v}" != "$crate_version" ]]; then
+          crate_version="$(tr -d '\r' < Cargo.toml | sed -n 's/^version = "\(.*\)"$/\1/p' | head -n1)"
+          echo "Cargo.toml version: $crate_version"
+          [[ -n "$crate_version" ]]
+          if [[ "${{ github.ref_type }}" == tag && "${GITHUB_REF_NAME#v}" != "$crate_version" ]]; then
             echo "tag $GITHUB_REF_NAME does not match Cargo.toml version $crate_version" >&2
             exit 1
           fi

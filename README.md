@@ -62,6 +62,10 @@ Prebuilt workers are attached to each
 | `lattice-miner-gpu-<version>-macos-arm64.tar.gz` | Metal, CPU | `--backend metal` (the default on macOS) |
 
 The Linux binary needs glibc 2.31 or newer (Ubuntu 20.04, Debian 11 and later).
+The mining coordinator (from the
+[lattice-node releases](https://github.com/0xLattice/lattice-node/releases)) is
+built for Linux and macOS only, so to mine on Windows run the Linux archive under
+WSL2; the Windows binary runs as a standalone worker.
 
 Verify the archive against its checksum file, then unpack it:
 
